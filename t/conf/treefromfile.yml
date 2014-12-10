@@ -1,0 +1,9 @@
+---
+name: TreeFromFile
+
+TreePath:
+  debug: 0
+  backend:
+    name: File
+    args:
+      file: t/conf/treepath.yml
