@@ -21,3 +21,5 @@ TreePath:
     args:
       model: Model::TPath
       source_name: Page
+      search_field: name
+      parent_field: parent_id

@@ -1,3 +1,4 @@
+use utf8;
 use strict;
 use Test::More 'no_plan';
 use lib 't/lib';
@@ -8,28 +9,64 @@ use TreePath;
 #
 #       A
 #      / \
-#     B   F
+#     B   ♥
 #    /   / \
 #   C   G   E
 #  / \     / \
 # D   E   I   J
 #
+my $simpletree = {
+             '1' => {
+                     parent => '0',
+                     name => '/'},
+             '2'=> {
+                    parent => '1',
+                    name => 'A'},
+             '3'=> {
+                    parent => '2',
+                    name => 'B'},
+             '4'=> {
+                    parent => '3',
+                    name => 'C'},
+             '5'=> {
+                    parent => '4',
+                    name => 'D'},
+             '6'=> {
+                    parent => '4',
+                    name => 'E'},
+             '7'=> {
+                    parent => '2',
+                    name => '♥'},
+             '8'=> {
+                    parent => '7',
+                    name => 'G'},
+             '9'=> {
+                    parent => '7',
+                    name => 'E'},
+             '10'=> {
+                     parent => '9',
+                     name => 'I'},
+             '11'=> {
+                     parent => '9',
+                     name => 'J'}
+            };
 
-use Schema::TPath;
 
-my $confs = [ 't/conf/treefromfile.yml', 't/conf/treefromdbix.yml' ];
 
-my $tree;
-foreach my $conf ( @$confs ){
+
+my @confs = ( $simpletree,
+              't/conf/treefromfile.yml',
+              't/conf/treefromdbix.yml',
+            );
+
+foreach my $conf ( @confs ){
 
   ok( my $tp = TreePath->new(  conf  => $conf  ),
-      "New TreePath (conf: $conf)");
-
+      "New TreePath ( conf => $conf)");
 
   my $tree = $tp->tree;
   isa_ok($tree, 'HASH');
 
-  # Traverse from root
   my $root = $tp->root;
   is($root,$tree->{1}, 'retrieve root');
   isa_ok($root, 'HASH', "root" );
@@ -86,8 +123,8 @@ foreach my $conf ( @$confs ){
   # B == found->[2] ?
   is( $B, $found->[2], 'B and found->[2] are the same');
 
-  # delete $tree->{1};
-  # print $tp->dump($tree);
-  # delete @$tree{keys $tree};
-  # print $tp->dump($tree);
+  # test utf8
+  ok( my $coeur = $tp->search( { name => '♥'} ), 'search ♥');
+  is($coeur->{parent}->{name},'A', 'parent is A');
+
 }

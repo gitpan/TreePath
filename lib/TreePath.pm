@@ -1,5 +1,6 @@
 package TreePath;
 
+use utf8;
 use v5.10;
 use Moose;
 with 'MooseX::Object::Pluggable';
@@ -7,9 +8,8 @@ with 'MooseX::Object::Pluggable';
 use Moose::Util::TypeConstraints;
 use Config::JFDI;
 use Carp qw/croak/;
-use Data::Dumper;
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 subtype MyConf => as 'HashRef';
 coerce 'MyConf'
@@ -27,16 +27,26 @@ has conf => ( is => 'rw',
                 my $self = shift;
                 my $args = shift;
 
-                croak "Error: Can not find " . $self->configword . " in your conf !"
-                  if ( ! $args->{$self->configword});
+                # if conf exist
+                if ( defined $args->{$self->configword} ) {
+                  croak "Error: Can not find " . $self->configword . " in your conf !"
+                    if ( ! $args->{$self->configword});
 
-                $self->config($args->{$self->configword});
+                  $self->config($args->{$self->configword});
 
-                $self->debug($self->config->{'debug'}) if ( defined $self->config->{'debug'} );
+                  $self->debug($self->config->{'debug'})
+                    if ( ! defined $self->debug && defined $self->config->{'debug'} );
 
-                $self->_load_backend if ! $self->can('backend');
+                  $self->_load_backend if ! $self->can('backend');
+                }
+                # it's a hash
+                else {
+                  $self->tree($args);
+                  $self->_build_tree;
+                }
               }
             );
+
 
 
 has config => (
@@ -46,7 +56,7 @@ has config => (
 
 has 'configword' => (
                 is       => 'rw',
-                     default => sub { __PACKAGE__ },
+                default => sub { __PACKAGE__ },
                );
 
 has 'debug' => (
@@ -170,7 +180,7 @@ sub search {
 sub search_path {
   my ( $self, $path, $opts ) = @_;
 
-  # search by 'name' if not defined
+  # search by 'name' if not defined
   $opts->{by} ='name' if ! defined $opts->{by};
 
   croak "path must be start by '/' !: $!\n" if ( $path !~ m|^/| );
@@ -178,14 +188,13 @@ sub search_path {
   my $nodes = [ split m%/%, $path ];
   $$nodes[0] = '/';
 
-  my $lasted_obj;
   my (@found, @not_found);
   my $parent = '/';
   foreach my $node ( @$nodes ) {
-    my $args = { $opts->{by} => $node, 'parent.name' => $parent};
+    my $args = { $opts->{by} => $node, "parent\.$opts->{by}" => $parent};
     my $result = $self->search($args, $opts);
 
-    $parent = $result->{name} if $result;
+    $parent = $result->{$opts->{by}} if $result;
 
     if ( $result ) {
       push(@found, $result);
@@ -230,53 +239,118 @@ TreePath - Simple Tree Path!
 
 =head1 SYNOPSIS
 
-    use TreePath;
+ use TreePath;
 
-    my $tp = TreePath->new(  conf  => $conf  );
-    my $tree = $tp->tree;
+ my $tp = TreePath->new(  conf  => $conf  );
+ my $tree = $tp->tree;
 
-    # All nodes are hash
-    # The first is called 'root'
-    my $root = $tp->root;
+ # All nodes are hash
+ # The first is called 'root'
+ my $root = $tp->root;
 
-    # a node can have children
-    my $children = $root->{children};
+ # a node can have children
+ my $children = $root->{children};
 
 =head1 SUBROUTINES/METHODS
 
-=head2 search
+=head2 new($method => $value)
 
-  # search by hashref
+ # for now there are two backend : DBIX and File
+ $tp = TreePath->new( conf => 't/conf/treefromdbix.yml')
 
-  # in scalar context return the first result
-  my $E = $tp->search( { name => 'E' } );
+ # see t/conf/treepath.yml for hash structure
+ $tp = TreePath->new( datas => $datas);
 
-  # return all result in array context
-  my @allE = $tp->search( { name => 'E' } );
+ also see t/01-tpath.t
 
-  # It is also possible to specify a particular field of a hash
-  my $B = $tp->search( { name => 'B', 'parent.name' => 'A'} );
+=cut
+
+=head2 tree
+
+ $tree = $tp->tree;
+
+=cut
+
+=head2 tree
+
+ $root = $tp->root;
+ # $root and $tree->{1} are the same
+
+ This is the root node ( a simple hashref )
+ it has no parent.
+     {
+       '1' => {
+                'id' => '1',
+                'name' => '/',
+                'parent' => '0'
+              }
+     }
+
+  $A = $tp->search( { name => 'A' } );
+  See the dump :
+
+    {
+      'children' => [
+                      {
+                        'children' => 'ARRAY(0x293ce00)',
+                        'id' => '3',
+                        'name' => 'B',
+                        'parent' => $VAR1
+                      },
+                      {
+                        'children' => 'ARRAY(0x2fd69b0)',
+                        'id' => '7',
+                        'name' => 'F',
+                        'parent' => $VAR1
+                      }
+                    ],
+      'id' => '2',
+      'name' => 'A',
+      'parent' => {
+                    'children' => [
+                                    $VAR1
+                                  ],
+                    'id' => '1',
+                    'name' => '/',
+                    'parent' => '0'
+                  }
+    }
+
+    => 'parent' is a reference on root node and 'children' is an array containing 2 nodes
+
+=cut
+
+=head2 search (by hashref)
+
+ # in scalar context return the first result
+ my $E = $tp->search( { name => 'E' } );
+
+ # return all result in array context
+ my @allE = $tp->search( { name => 'E' } );
+
+ # It is also possible to specify a particular field of a hash
+ my $B = $tp->search( { name => 'B', 'parent.name' => 'A'} );
 
 =cut
 
 =head2 search_path
 
-  # Search a path in a tree
-  # in scalar context return last node
-  my $c = $tp->search_path('/A/B/C');
+ # Search a path in a tree
+ # in scalar context return last node
+ my $c = $tp->search_path('/A/B/C');
 
-  # in array context return found and not_found nodes
-  my ($found, $not_found) = $tp->search_path('/A/B/X/D/E');
+ # in array context return found and not_found nodes
+ my ($found, $not_found) = $tp->search_path('/A/B/X/D/E');
 
 =cut
 
 =head2 dump
 
-  # dump whole tree
-  print $tp->dump;
+ # dump whole tree
+ print $tp->dump;
 
-  # dump a node
-  print $tp->dump($c);;
+ # dump a node
+ print $tp->dump($c);;
 
 =cut
 

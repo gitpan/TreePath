@@ -1,5 +1,9 @@
 Revision history for TreePath
 
+0.03   2014-12-18 21:59:01
+       directly use a hash as tree
+       test utf8
+
 0.02   2014-12-09 22:01:32
        add DBIx backend
 

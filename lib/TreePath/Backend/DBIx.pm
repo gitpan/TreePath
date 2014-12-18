@@ -1,5 +1,5 @@
 package TreePath::Backend::DBIx;
-$TreePath::Backend::DBIx::VERSION = '0.02';
+$TreePath::Backend::DBIx::VERSION = '0.03';
 use Moose::Role;
 use base 'DBIx::Class::Schema';
 use Carp qw/croak/;
@@ -109,20 +109,26 @@ sub _load {
   my($dsn, $user, $password, $allattrs) = $self->_connect_info;
 
   my $schema_class =  $self->model_config->{schema_class};
+  eval "require $schema_class";
+  if( $@ ){
+    die("Cannot load $schema_class : $@");
+  }
   my $schema = $schema_class->connect($dsn,$user,$password,$allattrs);
-
   my $source_name = $self->config->{backend}->{args}->{source_name};
   eval { $schema->resultset($source_name)->count };
 
   if ( $@ ) {
     print "Deploy and populate $dsn\n" if $self->debug;
     $schema->deploy;
-    $schema->_populate;
+    $schema->_populate if $schema->can('_populate');
   }
   $self->schema($schema);
 
-  my @pages = $self->schema->resultset($source_name)->search();
-  return { map { $_->id => { name => $_->name, parent => $_->parent_id } } @pages};
+  my @rs = $self->schema->resultset($source_name)->search();
+
+  my $search_field = $self->config->{backend}->{args}->{search_field};
+  my $parent_field = $self->config->{backend}->{args}->{parent_field};
+  return { map { $_->id => { name => $_->$search_field, parent => $_->$parent_field } } @rs};
 }
 
 =head1 NAME
@@ -131,12 +137,13 @@ TreePath::Backend::DBIx - Backend 'DBIx' for TreePath
 
 =head1 VERSION
 
-version 0.02
+version 0.03
 
 =head1 CONFIGURATION
 
-See t/conf/treefromdb.yml
+         $tp = TreePath->new(  conf  => 't/conf/treefromdbix.yml'  );
 
+         # t/conf/treefromdbix.yml
          Model::TPath:
            schema_class: Schema::TPath
            connect_info:
@@ -146,12 +153,16 @@ See t/conf/treefromdb.yml
            debug: 0
            backend:
              name: DBIx
-             model: Model::TPath
+             args:
+               model: Model::TPath
+               source_name: Page
+               search_field: name
+               parent_field: parent_id
 
 
 =head2 REQUIRED SCHEMA
 
-See t/lib/Schema/TPath/Result/
+See t/lib/Schema/TPath.pm
 
 =head1 AUTHOR
 

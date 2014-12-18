@@ -16,4 +16,4 @@ name: TreePath
 requires:
   Config::JFDI: '0'
   Moose: '2.0402'
-version: '0.02'
+version: '0.03'
