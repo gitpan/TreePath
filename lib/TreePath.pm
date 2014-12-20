@@ -8,8 +8,8 @@ with 'MooseX::Object::Pluggable';
 use Moose::Util::TypeConstraints;
 use Config::JFDI;
 use Carp qw/croak/;
-
-our $VERSION = '0.03';
+use Data::Dumper;
+our $VERSION = '0.04';
 
 subtype MyConf => as 'HashRef';
 coerce 'MyConf'
@@ -230,6 +230,28 @@ sub dump {
   return Dumper($var);
 }
 
+sub traverse {
+  my ($self, $node, $funcref, $args) = @_;
+
+  return 0 if ( ! $node || ! $funcref );
+  $args ||= {};
+  $args->{_count} = 1 if ! defined ($args->{_count});
+  # if first node
+  if ( $args->{_count} == 1 ) {
+    return 0 if ( ! &$funcref( $node, $args ) )
+  }
+
+  if(defined($node->{children})) {
+
+    foreach my $child ( @{$node->{children}} ) {
+      return 0 if ( ! &$funcref( $child, $args ) );
+      $args->{_count}++;
+      $self->traverse( $child, $funcref, $args );
+    }
+  }
+  return 0;
+}
+
 =head1 NAME
 
 TreePath - Simple Tree Path!
@@ -320,7 +342,7 @@ TreePath - Simple Tree Path!
 
 =cut
 
-=head2 search (by hashref)
+=head2 search (hashref)
 
  # in scalar context return the first result
  my $E = $tp->search( { name => 'E' } );
@@ -333,7 +355,7 @@ TreePath - Simple Tree Path!
 
 =cut
 
-=head2 search_path
+=head2 search_path (PATH)
 
  # Search a path in a tree
  # in scalar context return last node
@@ -351,6 +373,12 @@ TreePath - Simple Tree Path!
 
  # dump a node
  print $tp->dump($c);;
+
+=cut
+
+=head2 traverse ($node, \&function, $args)
+
+ $tp->traverse($node, \&function, $args);
 
 =cut
 

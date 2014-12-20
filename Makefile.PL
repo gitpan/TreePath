@@ -21,12 +21,13 @@ my %WriteMakefileArgs = (
   "NAME" => "TreePath",
   "PREREQ_PM" => {
     "Config::JFDI" => 0,
-    "Moose" => "2.0402"
+    "Moose" => "2.0402",
+    "MooseX::Object::Pluggable" => "0.0013"
   },
   "TEST_REQUIRES" => {
     "Test::Most" => 0
   },
-  "VERSION" => "0.03",
+  "VERSION" => "0.04",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -37,6 +38,7 @@ my %FallbackPrereqs = (
   "Config::JFDI" => 0,
   "ExtUtils::MakeMaker" => 0,
   "Moose" => "2.0402",
+  "MooseX::Object::Pluggable" => "0.0013",
   "Test::Most" => 0
 );
 

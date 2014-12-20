@@ -115,8 +115,8 @@ foreach my $conf ( @confs ){
   # found = /, A, B and not_found = X, D, E
   ok(my ($found, $not_found) = $tp->search_path('/A/B/X/D/E'), 'search /A/B/X/D/E in array context');
 
-  my @found_names = map { $_->{name} } @$found;
-  is_deeply( \@found_names, ['/', 'A', 'B'], "found /, A, B" );
+  my $found_names = node_names($found);
+  is_deeply( \@$found_names, ['/', 'A', 'B'], "found /, A, B" );
   is_deeply( \@$not_found, ['X', 'D', 'E'], "not found X, D, E" );
 
 
@@ -127,4 +127,32 @@ foreach my $conf ( @confs ){
   ok( my $coeur = $tp->search( { name => '♥'} ), 'search ♥');
   is($coeur->{parent}->{name},'A', 'parent is A');
 
+  my $args = { count => 0 };
+  $tp->traverse($coeur, \&myfunc, $args);
+  is($args->{_count}, 5, '♥ as four children + himself');
+
+  my $traverse_names = node_names($args->{all_nodes});
+  is_deeply( \@$traverse_names, ['♥', 'G', 'E', 'I', 'J' ], "traverse and return all nodes from ♥" );
+
+  #my @traverse_names = map { $_->{name} } @{$args->{all_nodes}};
+  #is_deeply( \@traverse_names, ['♥', 'G', 'E', 'I', 'J' ], "traverse and return all nodes from ♥" );
+
+  print $tp->dump($coeur);
+}
+
+sub myfunc() {
+  my ($node, $args) = @_;
+
+  $args->{all_nodes} = []
+  if ( ! defined $args->{all_nodes});
+
+  if(defined($node)) {
+    push(@{$args->{all_nodes}}, $node);
+    return 1;
+  }
+}
+
+sub node_names {
+  my $nodes = shift;
+  return [map { $_->{name}} @$nodes ];
 }
