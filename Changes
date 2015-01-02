@@ -1,5 +1,9 @@
 Revision history for TreePath
 
+0.06   2015-01-03 19:56:31
+       synchronize with dbix backend
+       delete several nodes at once
+
 0.05   2015-01-02 13:15:37
        add/del/insert_before node
        use 'position' field

@@ -10,7 +10,7 @@ use Config::JFDI;
 use Carp qw/croak/;
 use Data::Dumper;
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 subtype MyConf => as 'HashRef';
 coerce 'MyConf'
@@ -43,6 +43,9 @@ has conf => ( is => 'rw',
                   $self->_parent_field($self->config->{backend}->{args}->{parent_field})
                       if defined $self->config->{backend}->{args}->{parent_field};
 
+                  $self->_sync($self->config->{backend}->{args}->{sync})
+                      if defined $self->config->{backend}->{args}->{sync};
+
                   $self->_load_backend if ! $self->can('backend');
                 }
                 # it's a hash
@@ -67,6 +70,16 @@ has 'configword' => (
 
 has 'debug' => (
                 is       => 'rw',
+               );
+
+has '_backend' => (
+                is       => 'rw',
+                isa      => 'Str',
+               );
+
+has '_sync' => (
+                is       => 'rw',
+                isa      => 'Str',
                );
 
 has _plugin_ns => (
@@ -108,11 +121,21 @@ has root => (
 sub _load_backend {
   my $self = shift;
   my $backend = $self->config->{'backend'}->{name};
+  $self->_backend($backend);
 
   $self->_log("Loading $backend backend ...");
   $self->load_plugin( $backend );
   $self->_load_tree;
   $self->_build_tree;
+}
+
+sub reload {
+    my $self = shift;
+
+    $self->_populate_backend(0)
+        if $self->can('_populate_backend');
+
+    $self->_load_tree;
 }
 
 sub _log{
@@ -162,6 +185,53 @@ sub _last_node {
   return $self->tree->{$nodes_sorted_by_id[-1]};
 }
 
+sub  _create {
+    my $self = shift;
+    my $node = shift;
+    my $msg  = shift;
+
+    return if ( ! $self->_backend || ! $self->_sync );
+    $self->_log("[" . $self->_backend . "] CREATE " . $node->{name} . " | $msg");
+    $self->create($node);
+}
+
+sub  _delete {
+    my $self  = shift;
+    my $nodes = shift;
+    my $msg   = shift;
+
+    return if ( ! $self->_backend || ! $self->_sync );
+    my @nodes_name = map { $_->{$self->_search_field} } @$nodes;
+    $self->_log("[" . $self->_backend . "] DELETE @nodes_name | $msg");
+
+    $self->delete($nodes);
+}
+
+sub  _update {
+    my $self = shift;
+    my $node = shift;
+    my $msg  = shift;
+
+    return if ( ! $self->_backend || ! $self->_sync );
+    $self->_log("[" . $self->_backend . "] UPDATE " . $node->{name} . " | $msg");
+    $self->update($node);
+}
+
+sub _clone_node {
+    my $self = shift;
+    my $node = shift;
+
+    my $clone = {};
+    foreach my $k (keys %$node) {
+        if ( $k eq 'parent'){
+            $clone->{$self->_parent_field} = $node->{$k}->{id};
+        }
+        else {
+            $clone->{$k} = $node->{$k}
+        }
+    }
+    return $clone;
+}
 
 sub search {
   my ( $self, $args, $opts ) = @_;
@@ -307,28 +377,38 @@ sub traverse {
 
 
 sub del {
-  my ($self, $node) = @_;
+  my ($self, @nodes) = @_;
 
-  my $father = $node->{parent};
+  my @deleted;
+  foreach my $node ( @nodes ) {
 
-  # removes the child's father
-  my $id = 0;
-  foreach my $child ( @{$father->{children}}) {
-      splice ( @{$father->{children}},$id,1)
-      if ( $child->{$self->_search_field} eq $node->{$self->_search_field} &&
-               $child->{parent} eq $node->{parent} );
-      $id++;
+      my $father = $node->{parent};
+
+      # removes the child's father
+      my $id = 0;
+      my $is_finded = 0;
+      foreach my $child ( @{$father->{children}}) {
+          # decrease position
+          if ( $is_finded) {
+              $child->{$self->_position_field}--;
+              $self->_update($child, 'change position');
+          }
+
+          if ( $child->{$self->_search_field} eq $node->{$self->_search_field} &&
+                   $child->{parent} eq $node->{parent} ){
+              splice ( @{$father->{children}},$id,1);
+              $is_finded = 1;
+          }
+          $id++;
+      }
+
+      # traverse child branches and delete it
+      my $nodes = $self->traverse($node);
+      push(@deleted,map { delete $self->tree->{$_->{id}} } @$nodes);
+      $self->_delete($nodes, "delete " . @$nodes . " node(s)");
   }
-
-  # decrease position
-  map { $_->{$self->_position_field}--} @{$father->{children}}
-      if ( defined $node->{$self->_position_field});
-
-  # traverse child branches and delete it
-  my $nodes = $self->traverse($node);
-  map { delete $self->tree->{$_->{id}} } @$nodes;
+  return @deleted;
 }
-
 
 # Inserts a node beneath the parent at the given position.
 sub add {
@@ -342,10 +422,17 @@ sub add {
   # add node as last children
   if ( ! $position ) {
       # if last child's parent have a 'position' field
-      if ( defined ${$parent->{children}}[-1]->{$self->_position_field} ) {
-          my $next_position = ${$parent->{children}}[-1]->{$self->_position_field};
-          $next_position++;
-          $node->{$self->_position_field} = $next_position;
+      if ( defined $parent->{children} ) {
+
+          if ( defined ${$parent->{children}}[-1] && defined ${$parent->{children}}[-1]->{$self->_position_field} ) {
+
+              my $next_position = ${$parent->{children}}[-1]->{$self->_position_field};
+              $next_position++;
+              $node->{$self->_position_field} = $next_position;
+          }
+      }
+      else {
+          $parent->{children} = [];
       }
 
       # add child's parent
@@ -358,7 +445,7 @@ sub add {
       my $is_finded = 0;
       foreach my $child ( @{$parent->{children}} ) {
 
-          if ( $child->{$self->_position_field} == $position) {
+          if ( $child->{$self->_position_field} >= $position) {
               $is_finded = 1;
               $node->{$self->_position_field} = $position;
           }
@@ -369,6 +456,7 @@ sub add {
   }
 
   # add node in tree
+  $self->_create($node, 'add node ' . $node->{$self->_search_field});
   $self->tree->{$next_id} = $node;
 }
 
@@ -383,6 +471,7 @@ sub insert_before {
 
   return $self->add($sibling->{parent}, $node, $sibling->{$self->_position_field} );
 }
+
 
 =head1 NAME
 
@@ -422,6 +511,13 @@ TreePath - Simple Tree Path!
 =head2 tree
 
  $tree = $tp->tree;
+
+=cut
+
+=head2 reload
+
+ # reload tree from backend
+ $tree = $tp->reload;
 
 =cut
 
@@ -528,7 +624,10 @@ TreePath - Simple Tree Path!
 =head2 del ($node)
 
  # delete recursively all children and node
- $tp->del($node);
+ $deleted = $tp->del($node);
+
+ # delete several nodes at once
+ @del = $tp->del($n1, $n2, ...);
 
 =cut
 

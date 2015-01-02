@@ -1,5 +1,5 @@
 package TreePath::Backend::File;
-$TreePath::Backend::File::VERSION = '0.05';
+$TreePath::Backend::File::VERSION = '0.06';
 
 use Moose::Role;
 use Config::JFDI;
@@ -19,6 +19,23 @@ sub _load {
   return $jfdi->get;
 }
 
+sub create {
+    my $self = shift;
+    my $node = shift;
+
+}
+
+sub update {
+    my $self = shift;
+    my $node = shift;
+
+}
+
+sub delete {
+    my $self  = shift;
+    my $nodes = shift;
+
+}
 
 =head1 NAME
 
@@ -26,7 +43,7 @@ TreePath::Backend::File - Backend 'File' for TreePath
 
 =head1 VERSION
 
-version 0.05
+version 0.06
 
 =head1 CONFIGURATION
 
@@ -37,6 +54,14 @@ See t/conf/treefromfile.yml
            backend:
              name: File
 
+
+=head1 METHODS
+
+=head2 create
+
+=head2 update
+
+=head2 delete
 
 =head1 AUTHOR
 

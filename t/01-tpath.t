@@ -152,6 +152,17 @@ foreach my $conf ( @confs ){
   is ( $tp->count, 8, 'after deletion tree has 8 nodes');
   is(scalar @{$coeur->{children}}, 1, 'after deletion ♥ has only one child (G)');
 
+  # delete several nodes
+  ok(my $n1 = $tp->add($coeur, { name => 'N1'}), 'n1 added as a child to ♥');
+  ok(my $n2 = $tp->add($coeur, { name => 'N2'}), 'n2 added as a child to ♥');
+  ok(my $n3 = $tp->add($n2, { name => 'N3'}), 'n3 added as a child to n2');
+  is(scalar @{$coeur->{children}}, 3, '♥ has 4 children (G, N1, N2)');
+  is ( $tp->count, 11, 'tree has 11 nodes');
+
+  is($tp->del($n1, $n2), 3, 'delete N1, N2 and child N3');
+  is(scalar @{$coeur->{children}}, 1, 'after deletion ♥ has only one child (G)');
+
+
   # add node ---------------------
   my $x = { name => 'X'};
   ok(my $X = $tp->add($coeur, $x), 'x added as a child to ♥');

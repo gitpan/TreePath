@@ -1,5 +1,5 @@
 package TreePath::Backend::DBIx;
-$TreePath::Backend::DBIx::VERSION = '0.05';
+$TreePath::Backend::DBIx::VERSION = '0.06';
 use Moose::Role;
 use base 'DBIx::Class::Schema';
 use Carp qw/croak/;
@@ -39,6 +39,16 @@ has 'schema'     => (
                      predicate => 'has_schema',
 #                     lazy_build      => 1,
                     );
+
+has '_source_name' => (
+                is       => 'rw',
+                isa      => 'Str',
+               );
+
+has '_populate_backend' => (
+                is       => 'rw',
+                isa      => 'Int',
+               );
 
 
 sub _build_model_config {
@@ -108,6 +118,9 @@ sub _load {
 
   my($dsn, $user, $password, $allattrs) = $self->_connect_info;
 
+  $self->_populate_backend($self->config->{backend}->{args}->{'populate_backend'})
+  if ( $self->can('_populate_backend') && ! defined $self->_populate_backend && defined $self->config->{backend}->{args}->{'populate_backend'} );
+
   my $schema_class =  $self->model_config->{schema_class};
   eval "require $schema_class";
   if( $@ ){
@@ -115,12 +128,13 @@ sub _load {
   }
   my $schema = $schema_class->connect($dsn,$user,$password,$allattrs);
   my $source_name = $self->config->{backend}->{args}->{source_name};
+  $self->_source_name($source_name);
   eval { $schema->resultset($source_name)->count };
 
   if ( $@ ) {
     print "Deploy and populate $dsn\n" if $self->debug;
     $schema->deploy;
-    $schema->_populate if $schema->can('_populate');
+    $schema->_populate if ( $schema->can('_populate') && $self->_populate_backend);
   }
   $self->schema($schema);
 
@@ -132,13 +146,41 @@ sub _load {
   return { map { $_->id => { name => $_->$search_field, parent => $_->$parent_field } } @rs};
 }
 
+
+sub create {
+    my $self = shift;
+    my $node = shift;
+
+    my $clone = $self->_clone_node($node);
+    $self->schema->resultset($self->_source_name)->create($clone);
+}
+
+sub update {
+    my $self = shift;
+    my $node = shift;
+
+    my $clone = $self->_clone_node($node);
+    $self->schema->resultset($self->_source_name)->find_or_create($clone);
+}
+
+sub delete {
+    my $self  = shift;
+    my $nodes = shift;
+
+    foreach my $node (@$nodes) {
+        $self->schema->resultset($self->_source_name)->find($node->{id})->delete;
+    }
+}
+
+
+
 =head1 NAME
 
 TreePath::Backend::DBIx - Backend 'DBIx' for TreePath
 
 =head1 VERSION
 
-version 0.05
+version 0.06
 
 =head1 CONFIGURATION
 
@@ -159,6 +201,16 @@ version 0.05
                source_name: Page
                search_field: name
                parent_field: parent_id
+
+
+=head1 METHODS
+
+=head2 create
+
+=head2 update
+
+=head2 delete
+
 
 
 =head2 REQUIRED SCHEMA

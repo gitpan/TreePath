@@ -11,9 +11,11 @@ lib/TreePath/Backend/DBIx.pm
 lib/TreePath/Backend/File.pm
 t/00-load.t
 t/01-tpath.t
+t/02-backend.t
 t/conf/treefromdbix.yml
 t/conf/treefromfile.yml
 t/conf/treepath.yml
+t/conf/treesync.yml
 t/lib/Schema/TPath.pm
 t/lib/Schema/TPath/Result/Page.pm
 t/manifest.t

@@ -5,7 +5,7 @@ name: TreeFromDB
 Model::TPath:
   schema_class: Schema::TPath
   connect_info:
-    dsn: 'dbi:SQLite:dbname=:memory:'
+    dsn: 'dbi:SQLite:dbname=t/test.db'
 
 #Model::TPath:
 #  schema_class: Schema::TPath
@@ -24,3 +24,4 @@ TreePath:
       search_field: name
       parent_field: parent_id
       populate_backend: 1
+      sync: 1
