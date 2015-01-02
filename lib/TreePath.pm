@@ -9,7 +9,8 @@ use Moose::Util::TypeConstraints;
 use Config::JFDI;
 use Carp qw/croak/;
 use Data::Dumper;
-our $VERSION = '0.04';
+
+our $VERSION = '0.05';
 
 subtype MyConf => as 'HashRef';
 coerce 'MyConf'
@@ -36,6 +37,11 @@ has conf => ( is => 'rw',
 
                   $self->debug($self->config->{'debug'})
                     if ( ! defined $self->debug && defined $self->config->{'debug'} );
+
+                  $self->_search_field($self->config->{backend}->{args}->{search_field})
+                      if defined $self->config->{backend}->{args}->{search_field};
+                  $self->_parent_field($self->config->{backend}->{args}->{parent_field})
+                      if defined $self->config->{backend}->{args}->{parent_field};
 
                   $self->_load_backend if ! $self->can('backend');
                 }
@@ -68,6 +74,24 @@ has _plugin_ns => (
                 required => 1,
                 isa      => 'Str',
                 default  => sub{ 'Backend' },
+                  );
+
+has _search_field => (
+                is       => 'rw',
+                isa      => 'Str',
+                default  => sub{ 'name' },
+                  );
+
+has _parent_field => (
+                is       => 'rw',
+                isa      => 'Str',
+                default  => sub{ 'parent' },
+                  );
+
+has _position_field => (
+                is       => 'rw',
+                isa      => 'Str',
+                default  => sub{ 'position' },
                   );
 
 has tree => (
@@ -130,6 +154,14 @@ sub _build_tree {
   }
 }
 
+# return the last node sorted by id
+sub _last_node {
+  my $self = shift;
+
+  my @nodes_sorted_by_id = sort { $a <=> $b } map $_->{id}, values %{$self->tree};
+  return $self->tree->{$nodes_sorted_by_id[-1]};
+}
+
 
 sub search {
   my ( $self, $args, $opts ) = @_;
@@ -181,7 +213,7 @@ sub search_path {
   my ( $self, $path, $opts ) = @_;
 
   # search by 'name' if not defined
-  $opts->{by} ='name' if ! defined $opts->{by};
+  $opts->{by} = $self->_search_field if ! defined $opts->{by};
 
   croak "path must be start by '/' !: $!\n" if ( $path !~ m|^/| );
 
@@ -219,6 +251,12 @@ sub search_path {
 }
 
 
+sub count {
+  my $self = shift;
+
+  return scalar keys %{$self->tree};
+}
+
 sub dump {
   my $self = shift;
   my $var  = shift;
@@ -233,9 +271,22 @@ sub dump {
 sub traverse {
   my ($self, $node, $funcref, $args) = @_;
 
-  return 0 if ( ! $node || ! $funcref );
+  return 0 if ( ! $node );
   $args ||= {};
   $args->{_count} = 1 if ! defined ($args->{_count});
+
+  my $nofunc = 0;
+  if ( ! $funcref ) {
+    $nofunc=1;
+    $funcref = sub {    my ($node, $args) = @_;
+                        $args->{_each_nodes} = []
+                          if ( ! defined $args->{_each_nodes});
+                        if(defined($node)) {
+                          push(@{$args->{_each_nodes}}, $node);
+                          return 1;
+                        }
+                      }
+  }
   # if first node
   if ( $args->{_count} == 1 ) {
     return 0 if ( ! &$funcref( $node, $args ) )
@@ -249,7 +300,88 @@ sub traverse {
       $self->traverse( $child, $funcref, $args );
     }
   }
-  return 0;
+
+  return $args->{_each_nodes} if $nofunc;
+  return 1;
+}
+
+
+sub del {
+  my ($self, $node) = @_;
+
+  my $father = $node->{parent};
+
+  # removes the child's father
+  my $id = 0;
+  foreach my $child ( @{$father->{children}}) {
+      splice ( @{$father->{children}},$id,1)
+      if ( $child->{$self->_search_field} eq $node->{$self->_search_field} &&
+               $child->{parent} eq $node->{parent} );
+      $id++;
+  }
+
+  # decrease position
+  map { $_->{$self->_position_field}--} @{$father->{children}}
+      if ( defined $node->{$self->_position_field});
+
+  # traverse child branches and delete it
+  my $nodes = $self->traverse($node);
+  map { delete $self->tree->{$_->{id}} } @$nodes;
+}
+
+
+# Inserts a node beneath the parent at the given position.
+sub add {
+  my ($self, $parent, $node, $position) = @_;
+
+  $node->{parent} = $parent;
+  my $next_id = $self->_last_node->{id};
+  $next_id++;
+  $node->{id} = $next_id;
+
+  # add node as last children
+  if ( ! $position ) {
+      # if last child's parent have a 'position' field
+      if ( defined ${$parent->{children}}[-1]->{$self->_position_field} ) {
+          my $next_position = ${$parent->{children}}[-1]->{$self->_position_field};
+          $next_position++;
+          $node->{$self->_position_field} = $next_position;
+      }
+
+      # add child's parent
+      push(@{$parent->{children}}, $node);
+
+  }
+  # use the position
+  else {
+
+      my $is_finded = 0;
+      foreach my $child ( @{$parent->{children}} ) {
+
+          if ( $child->{$self->_position_field} == $position) {
+              $is_finded = 1;
+              $node->{$self->_position_field} = $position;
+          }
+          $child->{$self->_position_field}++
+              if ( $is_finded);
+      }
+      splice @{$parent->{children}}, $position-1, 0, $node;
+  }
+
+  # add node in tree
+  $self->tree->{$next_id} = $node;
+}
+
+sub insert_before {
+  my ($self, $sibling, $node) = @_;
+
+  my $position;
+
+  if ( ! defined $sibling->{$self->_position_field}) {
+      return $self->add($sibling->{parent}, $node, 1 );
+  }
+
+  return $self->add($sibling->{parent}, $node, $sibling->{$self->_position_field} );
 }
 
 =head1 NAME
@@ -293,10 +425,10 @@ TreePath - Simple Tree Path!
 
 =cut
 
-=head2 tree
+=head2 nodes
 
  $root = $tp->root;
- # $root and $tree->{1} are the same
+ # $root and $tree->{1} are the same node
 
  This is the root node ( a simple hashref )
  it has no parent.
@@ -376,11 +508,49 @@ TreePath - Simple Tree Path!
 
 =cut
 
-=head2 traverse ($node, \&function, $args)
+=head2 count
 
+ # return the number of nodes
+ print $tp->count;
+
+=cut
+
+=head2 traverse ($node, [\&function], [$args])
+
+ # return an arrayref of nodes
+ my $nodes = $tp->traverse($node);
+
+ # or use a function on each nodes
  $tp->traverse($node, \&function, $args);
 
 =cut
+
+=head2 del ($node)
+
+ # delete recursively all children and node
+ $tp->del($node);
+
+=cut
+
+=head2 add ($parent, $node)
+
+ # add a node beneath the parent at the last position.
+ $Z = $tp->add($parent, { name => 'Z' });
+
+ # or at given position
+ $Z = $tp->add($parent, { name => 'Z', position => 2 });
+
+=cut
+
+
+=head2 insert_before ($sibling, $node)
+
+ # Inserts a node beneath the parent before the given sibling.
+ $Y = $tp->insert_before($Z, { name => 'Y' });
+
+=cut
+
+
 
 =head1 AUTHOR
 

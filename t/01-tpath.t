@@ -1,12 +1,15 @@
 use utf8;
 use strict;
+
+use open qw(:std :utf8);
 use Test::More 'no_plan';
 use lib 't/lib';
 
 use TreePath;
 
 # ex: t/conf/treepath.yml
-#
+#       /
+#       |
 #       A
 #      / \
 #     B   ♥
@@ -39,7 +42,8 @@ my $simpletree = {
                     name => '♥'},
              '8'=> {
                     parent => '7',
-                    name => 'G'},
+                    name => 'G',
+                    position => 1 },
              '9'=> {
                     parent => '7',
                     name => 'E'},
@@ -115,29 +119,77 @@ foreach my $conf ( @confs ){
   # found = /, A, B and not_found = X, D, E
   ok(my ($found, $not_found) = $tp->search_path('/A/B/X/D/E'), 'search /A/B/X/D/E in array context');
 
-  my $found_names = node_names($found);
-  is_deeply( \@$found_names, ['/', 'A', 'B'], "found /, A, B" );
+  is_deeply( node_names($found), ['/', 'A', 'B'], "found /, A, B" );
   is_deeply( \@$not_found, ['X', 'D', 'E'], "not found X, D, E" );
 
 
   # B == found->[2] ?
   is( $B, $found->[2], 'B and found->[2] are the same');
 
-  # test utf8
+
+  # test utf8 -----------------------
   ok( my $coeur = $tp->search( { name => '♥'} ), 'search ♥');
   is($coeur->{parent}->{name},'A', 'parent is A');
 
-  my $args = { count => 0 };
-  $tp->traverse($coeur, \&myfunc, $args);
+  # traverse ------------------------
+  ok(my $coeur_nodes = $tp->traverse($coeur), 'all nodes from ♥');
+  is(scalar @$coeur_nodes, 5, 'traverse ♥ and 4 children');
+
+  my $args = {};
+  ok($tp->traverse($coeur, \&myfunc, $args), 'traverse tree with function');
   is($args->{_count}, 5, '♥ as four children + himself');
 
-  my $traverse_names = node_names($args->{all_nodes});
-  is_deeply( \@$traverse_names, ['♥', 'G', 'E', 'I', 'J' ], "traverse and return all nodes from ♥" );
+  is_deeply( node_names($args->{all_nodes}), ['♥', 'G', 'E', 'I', 'J' ], "traverse and return all nodes from ♥" );
 
-  #my @traverse_names = map { $_->{name} } @{$args->{all_nodes}};
-  #is_deeply( \@traverse_names, ['♥', 'G', 'E', 'I', 'J' ], "traverse and return all nodes from ♥" );
+  # delete node ---------------------
+  ok( my $E2 = $tp->search( { name => 'E', 'parent.name' => '♥'} ), 'search E to delete');
+  #
+  # before deletion
+  is ( $tp->count, 11, 'before deletion tree has 11 nodes');
+  is(scalar @{$coeur->{children}}, 2, 'before deletion ♥ has two children (G and E)');
+  # recursively deletes E2 and children
+  is($tp->del($E2), 3, 'delete E and 2 children');
+  is ( $tp->count, 8, 'after deletion tree has 8 nodes');
+  is(scalar @{$coeur->{children}}, 1, 'after deletion ♥ has only one child (G)');
 
-  print $tp->dump($coeur);
+  # add node ---------------------
+  my $x = { name => 'X'};
+  ok(my $X = $tp->add($coeur, $x), 'x added as a child to ♥');
+
+  my $x_parent = $X->{parent};
+  is( $x_parent->{id}, $coeur->{id}, 'X have ♥ as parent');
+
+  my $x_parent_children = $x_parent->{children};
+  is($$x_parent_children[-1]->{id}, $X->{id}, 'X is the last child of ♥');
+
+  ok(my $G = $tp->search( { name => 'G' } ), 'search G, the first child of ♥');
+
+  if ( defined $G->{position}) {
+      # is that the sibling also has a field 'position'
+      is($X->{position}, 2, 'X position is 2');
+
+      # no position is given
+      ok(my $Z = $tp->add($coeur, { name => 'Z'} ), 'z added as a child to ♥');
+      is($Z->{position}, 3, 'Z position is 3');
+
+
+      is_deeply( node_names($x_parent->{children}), ['G', 'X', 'Z'], "Before insert we have G, X, Z" );
+
+      # insert_before ----------------
+      ok(my $Y = $tp->insert_before($Z, { name => 'Y'} ), 'y insered before z');
+
+      is($Z->{position}, 4, 'Z position is 4');
+      is ( $tp->count, 11, 'after insertion tree has 11 nodes');
+
+      is_deeply( node_names($x_parent->{children}), ['G', 'X', 'Y', 'Z'], "After insert we have G, X, Y, Z" );
+
+      ok($tp->del($G),'delete G');
+      is_deeply( node_names($x_parent->{children}), ['X', 'Y', 'Z'], "After delete G, we have X, Y, Z" );
+
+      is($Z->{position}, 3, 'Z position is 3');
+
+
+  }
 }
 
 sub myfunc() {

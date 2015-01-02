@@ -1,5 +1,5 @@
 package TreePath::Backend::DBIx;
-$TreePath::Backend::DBIx::VERSION = '0.04';
+$TreePath::Backend::DBIx::VERSION = '0.05';
 use Moose::Role;
 use base 'DBIx::Class::Schema';
 use Carp qw/croak/;
@@ -126,8 +126,9 @@ sub _load {
 
   my @rs = $self->schema->resultset($source_name)->search();
 
-  my $search_field = $self->config->{backend}->{args}->{search_field};
-  my $parent_field = $self->config->{backend}->{args}->{parent_field};
+  my $search_field = $self->_search_field;
+  my $parent_field = $self->_parent_field;
+
   return { map { $_->id => { name => $_->$search_field, parent => $_->$parent_field } } @rs};
 }
 
@@ -137,7 +138,7 @@ TreePath::Backend::DBIx - Backend 'DBIx' for TreePath
 
 =head1 VERSION
 
-version 0.04
+version 0.05
 
 =head1 CONFIGURATION
 

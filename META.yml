@@ -17,4 +17,4 @@ requires:
   Config::JFDI: '0'
   Moose: '2.0402'
   MooseX::Object::Pluggable: '0.0013'
-version: '0.04'
+version: '0.05'

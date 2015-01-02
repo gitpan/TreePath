@@ -1,5 +1,9 @@
 Revision history for TreePath
 
+0.05   2015-01-02 13:15:37
+       add/del/insert_before node
+       use 'position' field
+
 0.04   2014-12-20 13:40:50
        traverse tree
        update dependencies
