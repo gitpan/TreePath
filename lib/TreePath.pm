@@ -10,7 +10,7 @@ use Config::JFDI;
 use Carp qw/croak/;
 use Data::Dumper;
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 
 subtype MyConf => as 'HashRef';
 coerce 'MyConf'

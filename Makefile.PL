@@ -22,12 +22,13 @@ my %WriteMakefileArgs = (
   "PREREQ_PM" => {
     "Config::JFDI" => 0,
     "Moose" => "2.0402",
-    "MooseX::Object::Pluggable" => "0.0013"
+    "MooseX::Object::Pluggable" => "0.0013",
+    "UNIVERSAL::require" => "0.17"
   },
   "TEST_REQUIRES" => {
     "Test::Most" => 0
   },
-  "VERSION" => "0.06",
+  "VERSION" => "0.07",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -39,7 +40,8 @@ my %FallbackPrereqs = (
   "ExtUtils::MakeMaker" => 0,
   "Moose" => "2.0402",
   "MooseX::Object::Pluggable" => "0.0013",
-  "Test::Most" => 0
+  "Test::Most" => 0,
+  "UNIVERSAL::require" => "0.17"
 );
 
 

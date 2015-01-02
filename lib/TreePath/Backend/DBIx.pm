@@ -1,5 +1,5 @@
 package TreePath::Backend::DBIx;
-$TreePath::Backend::DBIx::VERSION = '0.06';
+$TreePath::Backend::DBIx::VERSION = '0.07';
 use Moose::Role;
 use base 'DBIx::Class::Schema';
 use Carp qw/croak/;
@@ -180,7 +180,7 @@ TreePath::Backend::DBIx - Backend 'DBIx' for TreePath
 
 =head1 VERSION
 
-version 0.06
+version 0.07
 
 =head1 CONFIGURATION
 

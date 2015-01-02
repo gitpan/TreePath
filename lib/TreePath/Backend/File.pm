@@ -1,5 +1,5 @@
 package TreePath::Backend::File;
-$TreePath::Backend::File::VERSION = '0.06';
+$TreePath::Backend::File::VERSION = '0.07';
 
 use Moose::Role;
 use Config::JFDI;
@@ -43,7 +43,7 @@ TreePath::Backend::File - Backend 'File' for TreePath
 
 =head1 VERSION
 
-version 0.06
+version 0.07
 
 =head1 CONFIGURATION
 
