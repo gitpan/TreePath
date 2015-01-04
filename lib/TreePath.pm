@@ -10,7 +10,7 @@ use Config::JFDI;
 use Carp qw/croak/;
 use Data::Dumper;
 
-our $VERSION = '0.07';
+our $VERSION = '0.08';
 
 subtype MyConf => as 'HashRef';
 coerce 'MyConf'
@@ -182,20 +182,21 @@ sub _last_node {
   my $self = shift;
 
   my @nodes_sorted_by_id = sort { $a <=> $b } map $_->{id}, values %{$self->tree};
+  return { id => 0 } if ! defined $nodes_sorted_by_id[0];
   return $self->tree->{$nodes_sorted_by_id[-1]};
 }
 
-sub  _create {
+sub  _bckd_create {
     my $self = shift;
     my $node = shift;
     my $msg  = shift;
 
     return if ( ! $self->_backend || ! $self->_sync );
     $self->_log("[" . $self->_backend . "] CREATE " . $node->{name} . " | $msg");
-    $self->create($node);
+    $self->_create($node);
 }
 
-sub  _delete {
+sub  _bckd_delete {
     my $self  = shift;
     my $nodes = shift;
     my $msg   = shift;
@@ -204,18 +205,55 @@ sub  _delete {
     my @nodes_name = map { $_->{$self->_search_field} } @$nodes;
     $self->_log("[" . $self->_backend . "] DELETE @nodes_name | $msg");
 
-    $self->delete($nodes);
+    $self->_delete($nodes);
 }
 
-sub  _update {
+sub  _bckd_update {
     my $self = shift;
     my $node = shift;
     my $msg  = shift;
 
     return if ( ! $self->_backend || ! $self->_sync );
     $self->_log("[" . $self->_backend . "] UPDATE " . $node->{name} . " | $msg");
-    $self->update($node);
+    $self->_update($node);
 }
+
+sub _update_children_position {
+    my $self     = shift;
+    my @children = @_;
+
+    my $n=1;
+    foreach my $child ( @children ) {
+        if (  ! defined $child->{$self->_position_field}  ||
+                   $child->{$self->_position_field} != $n )
+            {
+                my $pos = defined $child->{$self->_position_field} ?
+                    $child->{$self->_position_field} : '?';
+                my $msg = 'updating position of '. $child->{$self->_search_field} .
+                    "( $pos -> $n)";
+                $child->{$self->_position_field} = $n;
+                $self->_bckd_update($child, $msg );
+            }
+        $n++;
+    }
+}
+
+# removes the child's father
+sub _remove_child_father{
+    my $self = shift;
+    my $node = shift;
+
+    my $father = $node->{parent};
+    my $id = 0;
+    foreach my $child ( @{$father->{children}}) {
+        if ( $child->{$self->_search_field} eq $node->{$self->_search_field} &&
+                 $child->{parent} eq $node->{parent} ){
+            return splice ( @{$father->{children}},$id,1);
+        }
+        $id++;
+    }
+}
+
 
 sub _clone_node {
     my $self = shift;
@@ -224,11 +262,15 @@ sub _clone_node {
     my $clone = {};
     foreach my $k (keys %$node) {
         if ( $k eq 'parent'){
-            $clone->{$self->_parent_field} = $node->{$k}->{id};
+            if ( $node->{'parent'}) {
+                $clone->{$self->_parent_field} = $node->{$k}->{id};
+            }
+            # is root
+            else {
+                $clone->{$self->_parent_field} = 0;
+            }
         }
-        else {
-            $clone->{$k} = $node->{$k}
-        }
+        else { $clone->{$k} = $node->{$k} }
     }
     return $clone;
 }
@@ -384,28 +426,16 @@ sub del {
 
       my $father = $node->{parent};
 
-      # removes the child's father
-      my $id = 0;
-      my $is_finded = 0;
-      foreach my $child ( @{$father->{children}}) {
-          # decrease position
-          if ( $is_finded) {
-              $child->{$self->_position_field}--;
-              $self->_update($child, 'change position');
-          }
+      $self->_remove_child_father($node);
 
-          if ( $child->{$self->_search_field} eq $node->{$self->_search_field} &&
-                   $child->{parent} eq $node->{parent} ){
-              splice ( @{$father->{children}},$id,1);
-              $is_finded = 1;
-          }
-          $id++;
-      }
+      # if position field exist, recalc all children position
+      $self->_update_children_position( @{$father->{children}} )
+          if ( defined $node->{$self->_position_field});
 
       # traverse child branches and delete it
       my $nodes = $self->traverse($node);
       push(@deleted,map { delete $self->tree->{$_->{id}} } @$nodes);
-      $self->_delete($nodes, "delete " . @$nodes . " node(s)");
+      $self->_bckd_delete($nodes, "delete " . @$nodes . " node(s)");
   }
   return @deleted;
 }
@@ -415,55 +445,39 @@ sub add {
   my ($self, $parent, $node, $position) = @_;
 
   $node->{parent} = $parent;
-  my $next_id = $self->_last_node->{id};
-  $next_id++;
-  $node->{id} = $next_id;
+  $node->{id}     = $self->_last_node->{id} +1;
 
-  # add node as last children
-  if ( ! $position ) {
-      # if last child's parent have a 'position' field
-      if ( defined $parent->{children} ) {
-
-          if ( defined ${$parent->{children}}[-1] && defined ${$parent->{children}}[-1]->{$self->_position_field} ) {
-
-              my $next_position = ${$parent->{children}}[-1]->{$self->_position_field};
-              $next_position++;
-              $node->{$self->_position_field} = $next_position;
-          }
+  my $update_children = 0;
+  if ( $parent ) {
+      if ( $position ) {
+          splice @{$parent->{children}}, $position-1, 0, $node;
+          $update_children = 1;
       }
       else {
-          $parent->{children} = [];
-      }
-
-      # add child's parent
-      push(@{$parent->{children}}, $node);
-
-  }
-  # use the position
-  else {
-
-      my $is_finded = 0;
-      foreach my $child ( @{$parent->{children}} ) {
-
-          if ( $child->{$self->_position_field} >= $position) {
-              $is_finded = 1;
-              $node->{$self->_position_field} = $position;
+          push(@{$parent->{children}}, $node);
+          if ( defined ${$parent->{children}}[0] && ${$parent->{children}}[0]->{$self->_position_field}) {
+              $update_children = 1;
           }
-          $child->{$self->_position_field}++
-              if ( $is_finded);
       }
-      splice @{$parent->{children}}, $position-1, 0, $node;
   }
-
+  else {
+      if ( $self->root) {
+          die "root already exist !";
+      }
+      $self->root($node);
+  }
   # add node in tree
-  $self->_create($node, 'add node ' . $node->{$self->_search_field});
-  $self->tree->{$next_id} = $node;
+  $self->_bckd_create($node, 'add node ' . $node->{$self->_search_field});
+
+  # recalc position of children
+  $self->_update_children_position(@{$parent->{children}}) if $update_children;
+
+  # save node in tree
+  $self->tree->{$node->{id}} = $node;
 }
 
 sub insert_before {
   my ($self, $sibling, $node) = @_;
-
-  my $position;
 
   if ( ! defined $sibling->{$self->_position_field}) {
       return $self->add($sibling->{parent}, $node, 1 );
@@ -472,6 +486,58 @@ sub insert_before {
   return $self->add($sibling->{parent}, $node, $sibling->{$self->_position_field} );
 }
 
+
+sub update {
+  my ($self, $node, $datas) = @_;
+
+  foreach my $k ( sort keys %$datas ) {
+      next if ( ! defined $node->{$k});
+      next if ( $node->{$k} eq $datas->{$k});
+
+      my $previous = $node->{$k};
+      my $parent   = $node->{parent};
+      my $children = $parent->{children};
+
+
+      # if update 'position'
+      if ( $k eq $self->_position_field ) {
+          # delete child in parent in previous positioh
+          my $old = splice(@$children, $previous-1, 1);
+          # add child in parent in new positioh
+          splice(@$children,$datas->{$k}-1,0, $old);
+          $self->_update_children_position(@{$node->{parent}->{children}})
+              if ( defined $node->{$self->_position_field});
+      }
+      elsif ( $k eq 'parent') {
+          my $old = $self->_remove_child_father($node);
+          my $new_parent = $datas->{$k};
+          push(@{$new_parent->{children}}, $old);
+
+          $node->{parent} = $new_parent;
+
+          my $msg = 'updating parent of '. $node->{$self->_search_field} .
+              " ( " . $old->{name} . " -> ". $node->{parent}->{name} .")";
+
+          $self->_bckd_update($node, $msg);
+
+          if ( defined $node->{$self->_position_field}) {
+              $self->_update_children_position(@{$parent->{children}});
+              $self->_update_children_position(@{$new_parent->{children}});
+          }
+      }
+      else {
+          $node->{$k} = $datas->{$k};
+      }
+  }
+  return $node;
+}
+
+
+sub move {
+    my ($self, $node, $parent) = @_;
+
+    return $self->update($node, { parent => $parent });
+}
 
 =head1 NAME
 
@@ -633,6 +699,9 @@ TreePath - Simple Tree Path!
 
 =head2 add ($parent, $node)
 
+ # add the root
+ $root = $tp->add(0, { name => '/'});
+
  # add a node beneath the parent at the last position.
  $Z = $tp->add($parent, { name => 'Z' });
 
@@ -641,6 +710,23 @@ TreePath - Simple Tree Path!
 
 =cut
 
+=head2 update ($node, $datas)
+
+ # update node with somes datas
+ $Z = $tp->update($node, { name => 'new_name' });
+
+ # it's possible to update position
+ $X = $tp->update($node, { position => 2 });
+
+=cut
+
+
+=head2 move ($node, $parent)
+
+ # move a node as child of given parent
+ $Z = $tp->move($Z, $X);
+
+=cut
 
 =head2 insert_before ($sibling, $node)
 

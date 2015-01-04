@@ -12,12 +12,15 @@ lib/TreePath/Backend/File.pm
 t/00-load.t
 t/01-tpath.t
 t/02-backend.t
+t/03-position.t
 t/conf/treefromdbix.yml
 t/conf/treefromfile.yml
 t/conf/treepath.yml
 t/conf/treesync.yml
+t/conf/treewithposition.yml
 t/lib/Schema/TPath.pm
 t/lib/Schema/TPath/Result/Page.pm
+t/lib/Schema/TPath/Result/PageWithPosition.pm
 t/manifest.t
 t/pod-coverage.t
 t/pod.t

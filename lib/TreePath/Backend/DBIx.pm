@@ -1,5 +1,5 @@
 package TreePath::Backend::DBIx;
-$TreePath::Backend::DBIx::VERSION = '0.07';
+$TreePath::Backend::DBIx::VERSION = '0.08';
 use Moose::Role;
 use base 'DBIx::Class::Schema';
 use Carp qw/croak/;
@@ -147,7 +147,7 @@ sub _load {
 }
 
 
-sub create {
+sub _create {
     my $self = shift;
     my $node = shift;
 
@@ -155,15 +155,15 @@ sub create {
     $self->schema->resultset($self->_source_name)->create($clone);
 }
 
-sub update {
+sub _update {
     my $self = shift;
     my $node = shift;
 
     my $clone = $self->_clone_node($node);
-    $self->schema->resultset($self->_source_name)->find_or_create($clone);
+    $self->schema->resultset($self->_source_name)->update_or_create($clone);
 }
 
-sub delete {
+sub _delete {
     my $self  = shift;
     my $nodes = shift;
 
@@ -180,7 +180,7 @@ TreePath::Backend::DBIx - Backend 'DBIx' for TreePath
 
 =head1 VERSION
 
-version 0.07
+version 0.08
 
 =head1 CONFIGURATION
 
@@ -201,16 +201,6 @@ version 0.07
                source_name: Page
                search_field: name
                parent_field: parent_id
-
-
-=head1 METHODS
-
-=head2 create
-
-=head2 update
-
-=head2 delete
-
 
 
 =head2 REQUIRED SCHEMA

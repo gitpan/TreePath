@@ -61,6 +61,7 @@ my $simpletree = {
 my @confs = ( $simpletree,
               't/conf/treefromfile.yml',
               't/conf/treefromdbix.yml',
+              't/conf/treesync.yml',
             );
 
 foreach my $conf ( @confs ){
@@ -161,9 +162,12 @@ foreach my $conf ( @confs ){
 
   is($tp->del($n1, $n2), 3, 'delete N1, N2 and child N3');
   is(scalar @{$coeur->{children}}, 1, 'after deletion ♥ has only one child (G)');
-
+  is ( $tp->count, 8, 'tree has 8 nodes');
 
   # add node ---------------------
+  eval { $tp->add(0, { name => 'hehe'}) };
+  ok($@ =~ m/root already exist/,"cannot add a second root");
+
   my $x = { name => 'X'};
   ok(my $X = $tp->add($coeur, $x), 'x added as a child to ♥');
 
@@ -199,9 +203,33 @@ foreach my $conf ( @confs ){
 
       is($Z->{position}, 3, 'Z position is 3');
 
+      # update node ---------------------
+      is($X->{id}, 9, 'X id equal 9');
+      ok($tp->update($X, { name => 'x'}), 'update x name');
+      is($X->{name}, 'x', 'The name of X is x');
 
+      # update position
+      ok($tp->update($X, { position => 2}), 'update x position');
+      is($X->{position}, 2, 'The position of X is 2');
+      is($Y->{position}, 1, 'The position of Y is 1');
+
+      # update parent
+      is(scalar @{$coeur->{children}}, 3, '♥ have 3 chidren');
+      is(scalar @{$B->{children}}, 1, 'B have 1 chid');
+      is( $X->{parent}->{name}, $coeur->{name}, 'X have ♥ as parent');
+      ok($tp->update($X, { parent => $B}), 'update X parent => B');
+      is( $X->{parent}->{name}, 'B', 'X have B as parent');
+      is(scalar @{$coeur->{children}}, 2, '♥ have 2 children');
   }
+
+  # move node ---------------------
+  ok(my $ZZ = $tp->add($tp->root, { name => 'ZZ'} ), 'zz added as a child of root');
+  is(scalar @{$coeur->{children}}, 2, '♥ has two child (G, X)');
+  ok(my $ZZ = $tp->move($ZZ, $coeur ), 'move zz to ♥');
+  is(scalar @{$coeur->{children}}, 3, 'now ♥ has three child (G, X, ZZ)');
 }
+
+unlink 't/test.db';
 
 sub myfunc() {
   my ($node, $args) = @_;

@@ -1,0 +1,28 @@
+---
+name: TreeFromDB
+
+
+Model::TPath:
+  schema_class: Schema::TPath
+  connect_info:
+    dsn: 'dbi:SQLite:dbname=t/test.db'
+
+#Model::TPath:
+#  schema_class: Schema::TPath
+#  connect_info:
+#    dsn: dbi:mysql:database=tpath;host=localhost
+#    user: root
+#    password: root
+
+TreePath:
+  debug: 0
+  backend:
+    name: DBIx
+    args:
+      model: Model::TPath
+      source_name: PageWithPosition
+      search_field: name
+      parent_field: parent_id
+      position_field: position
+      populate_backend: 1
+      sync: 1

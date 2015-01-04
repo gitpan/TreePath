@@ -21,14 +21,16 @@ my %WriteMakefileArgs = (
   "NAME" => "TreePath",
   "PREREQ_PM" => {
     "Config::JFDI" => 0,
+    "DBIx::Class" => "0.082810",
     "Moose" => "2.0402",
     "MooseX::Object::Pluggable" => "0.0013",
-    "UNIVERSAL::require" => "0.17"
+    "UNIVERSAL::require" => "0.17",
+    "YAML" => "1.13"
   },
   "TEST_REQUIRES" => {
     "Test::Most" => 0
   },
-  "VERSION" => "0.07",
+  "VERSION" => "0.08",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -37,11 +39,13 @@ my %WriteMakefileArgs = (
 
 my %FallbackPrereqs = (
   "Config::JFDI" => 0,
+  "DBIx::Class" => "0.082810",
   "ExtUtils::MakeMaker" => 0,
   "Moose" => "2.0402",
   "MooseX::Object::Pluggable" => "0.0013",
   "Test::Most" => 0,
-  "UNIVERSAL::require" => "0.17"
+  "UNIVERSAL::require" => "0.17",
+  "YAML" => "1.13"
 );
 
 
